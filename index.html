@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>서울 아파트 매매가 변화</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js" defer></script>
+<script src="web/deck.js" defer></script>
+<style>
+  :root {
+    --bg: #fafaf7; --surface: #ffffff; --ink: #1d1d1f; --muted: #6b6b70; --line: #e6e4de;
+    --accent: #f26b1d; --accent-soft: #fff1e7; --green: #03c75a; --blue: #2b5c8a; --red: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { overflow: hidden; display: grid; place-items: center; background: #e7e5df;
+         font-family: "Noto Sans KR", system-ui, sans-serif; color: var(--ink); }
+
+  /* 16:9 화면 틀 — 글씨는 틀 너비에 비례 (--u = 틀 너비의 1%) */
+  .stage {
+    --w: min(100vw, calc(100vh * 16 / 9)); --u: calc(var(--w) / 100);
+    width: var(--w); height: calc(var(--w) * 9 / 16);
+    position: relative; background: var(--bg); overflow: hidden;
+  }
+  .slide {
+    position: absolute; inset: 0 0 calc(var(--u) * 3) 0;
+    padding: calc(var(--u) * 3) calc(var(--u) * 4.2) calc(var(--u) * 1.5);
+    display: flex; flex-direction: column; gap: calc(var(--u) * 1.1);
+    opacity: 0; pointer-events: none; visibility: hidden; transition: opacity .3s ease, visibility 0s .3s;
+  }
+  .slide.active { opacity: 1; pointer-events: auto; visibility: visible; transition: opacity .3s ease, visibility 0s; }
+
+  .slide > .tag:first-child { margin: 0; }
+  .tag { align-self: flex-start; font-size: calc(var(--u) * .85); font-weight: 700; color: var(--accent);
+         background: var(--accent-soft); padding: calc(var(--u) * .25) calc(var(--u) * .8); border-radius: 999px; }
+  h1 { font-size: calc(var(--u) * 3.6); font-weight: 900; line-height: 1.25; margin: 0; letter-spacing: -.02em; }
+  h2 { font-size: calc(var(--u) * 2.0); font-weight: 800; margin: 0; letter-spacing: -.01em; }
+  .lead { font-size: calc(var(--u) * 1.2); color: var(--muted); margin: 0; line-height: 1.6; }
+  p, li, td, th { font-size: calc(var(--u) * 1.12); line-height: 1.6; }
+  ul { margin: 0; padding-left: 1.2em; }
+  li + li { margin-top: calc(var(--u) * .4); }
+  b.o { color: var(--accent); } b.g { color: var(--green); } b.r { color: var(--red); } b.b { color: var(--blue); }
+
+  .cover { justify-content: center; }
+  .cover .bar { width: calc(var(--u) * 5); height: calc(var(--u) * .45); background: var(--accent); border-radius: 3px; }
+  .cover .meta { font-size: calc(var(--u) * 1); color: var(--muted); margin-top: calc(var(--u) * 2); }
+
+  .grid { display: grid; gap: calc(var(--u) * 1.2); }
+  .c2 { grid-template-columns: 1fr 1fr; } .c3 { grid-template-columns: repeat(3, 1fr); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: calc(var(--u) * .8);
+          padding: calc(var(--u) * 1.3) calc(var(--u) * 1.5); }
+  .card .k { font-size: calc(var(--u) * .9); font-weight: 900; color: var(--accent); margin-bottom: calc(var(--u) * .4); }
+  .card h3 { margin: 0 0 calc(var(--u) * .4); font-size: calc(var(--u) * 1.3); }
+  .card p { margin: 0; color: #3a3a3e; }
+  .big { font-size: calc(var(--u) * 2.4); font-weight: 900; font-variant-numeric: tabular-nums; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); }
+  th, td { text-align: left; padding: calc(var(--u) * .55) calc(var(--u) * .9); border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--accent-soft); font-weight: 700; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .up { color: var(--red); font-weight: 700; } .down { color: var(--blue); font-weight: 700; }
+
+  .row { display: flex; gap: calc(var(--u) * 1.4); flex: 1; min-height: 0; }
+  .chart { flex: 1; min-height: 0; min-width: 0; background: var(--surface); border: 1px solid var(--line);
+           border-radius: calc(var(--u) * .8); position: relative; }
+  .chart > div { position: absolute; inset: calc(var(--u) * .4); }
+  .side { flex: 0 0 34%; display: flex; flex-direction: column; gap: calc(var(--u) * .9); }
+  .wide .side { flex-basis: 22%; }
+  table.mini td, table.mini th { font-size: calc(var(--u) * .78); padding: calc(var(--u) * .3) calc(var(--u) * .4); line-height: 1.3; }
+  table.mini td.n { text-align: center; }
+  .note { font-size: calc(var(--u) * .85); color: var(--muted); margin: 0; }
+
+  /* 문제 제기 + 데이터 슬라이드 (두 장을 한 장으로) */
+  .intro { justify-content: flex-start; }
+  .intro .card h3 { margin: 0; }
+  .dense { gap: calc(var(--u) * .8); }
+  .dense p, .dense td, .dense th { font-size: calc(var(--u) * .95); line-height: 1.5; }
+  .dense .lead { font-size: calc(var(--u) * 1.2); color: #2e2e32; font-weight: 500; }
+  .dense .card { padding: calc(var(--u) * .8) calc(var(--u) * 1.2); }
+  .dense .card h3 { font-size: calc(var(--u) * 1.05); margin: 0 0 calc(var(--u) * .25); }
+  .dense td, .dense th { padding: calc(var(--u) * .35) calc(var(--u) * .8); }
+
+  /* 시나리오 표 */
+  .scen tr.hl td { background: #fffaf5; }
+  .scen td:first-child { white-space: nowrap; }
+
+  /* 결론 슬라이드: 글씨를 키우고 세로 가운데 정렬 */
+  .concl { justify-content: flex-start; }
+  .concl .card h3 { font-size: calc(var(--u) * 1.3); }
+  .concl .card p { font-size: calc(var(--u) * 1.3); }
+  .concl .grid .card p { font-size: calc(var(--u) * 1.1); }
+  /* 결론 장: 위 카드들과 아래 표·요약 사이 간격만 조금 넓게 */
+  .concl-body { flex: 0 0 auto; margin-top: calc(var(--u) * 1.2); }
+  .concl .card .k { font-size: calc(var(--u) * 1.05); }
+
+  /* 그래프 페이지를 끼워 넣는 슬라이드 */
+  .embed { gap: calc(var(--u) * .6); }
+  .embed iframe { flex: 1; border: 0; width: 100%; background: transparent; }
+
+  /* 아래 이동 막대 */
+  .nav { position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--u) * 3);
+         display: flex; align-items: center; gap: calc(var(--u) * 1); padding: 0 calc(var(--u) * 1.6);
+         border-top: 1px solid var(--line); background: var(--surface); }
+  .nav button { width: calc(var(--u) * 2.1); height: calc(var(--u) * 2.1); border-radius: 50%; border: 1px solid var(--line);
+                background: var(--surface); font-size: calc(var(--u) * 1.1); cursor: pointer; color: var(--ink); }
+  .nav button:hover { border-color: var(--accent); color: var(--accent); }
+  .nav button:disabled { opacity: .3; cursor: default; }
+  .nav .title { font-size: calc(var(--u) * .85); color: var(--muted); }
+  .progress { flex: 1; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
+  .counter { font-size: calc(var(--u) * .85); color: var(--muted); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+
+  <!-- 1. 표지 -->
+  <section class="slide cover">
+    <div class="bar"></div>
+    <h1>2021~2026년 서울 아파트<br><span style="color:var(--accent)">매매가 변화</span> 분석</h1>
+    <p class="lead">서울 25개 자치구 아파트 매매 실거래 235,080건 · 2021.09 – 2026.08 (60개월)</p>
+    <div class="meta">스마트시티 융합기술세미나 | 과제2 | 2026년 10월 18일</div>
+  </section>
+
+  <!-- 2. 문제 제기 · 데이터 · 분석 방법 (한 장) -->
+  <section class="slide intro dense">
+    <span class="tag">1. 문제 제기</span>
+    <h2>지난 5년, 금리는 올랐다 내린 뒤 다시 반등</h2>
+    <p class="lead">주담대 금리(예금은행 신규 주택담보대출 금리)는 1년 만에 3.0% → 4.8%로 치솟았다가 3.5%까지 내려온 뒤 다시 4.7%로 올랐다.
+      이 기간 서울 아파트값은 어떻게 움직였을까?</p>
+    <span class="tag">데이터</span>
+    <table>
+      <thead><tr><th>데이터</th><th>출처</th><th>규모 · 처리</th></tr></thead>
+      <tbody>
+        <tr><td>아파트 매매 실거래가</td><td>국토교통부 실거래가 공개 API</td><td>25개 구 × 60개월 · 248,251건 수집 → 해제(취소) 13,171건 제외 → <b>235,080건</b></td></tr>
+        <tr><td>주택담보대출 금리</td><td>한국은행 ECOS (예금은행 대출금리, 신규취급액)</td><td>월별 60개 값 (연리 %)</td></tr>
+        <tr><td>단지 세대수</td><td>공동주택관리정보시스템(K-apt) · 건축물대장 API</td><td>500세대 이상 대단지 구분 (거래의 84% K-apt 기준)</td></tr>
+        <tr><td>단지 용적률</td><td>건축HUB 건축물대장 API · V-World 토지대장 API</td><td>주소 7,826개 중 7,628개 (거래의 98%): 대장 값 7,098개 + 대장에 없는 530개는 연면적 ÷ 대지면적으로 계산 · 50% 미만·1,000% 초과 제외</td></tr>
+        <tr><td>단지 좌표 · 구 경계</td><td>카카오 로컬 API · 통계청 시군구 경계</td><td>주소 7,826개 → 좌표·행정동 / 서울 25개 구 지도</td></tr>
+      </tbody>
+    </table>
+    <p class="note">※ 실거래는 계약 후 30일 안에 신고하므로, 수집 시점(2026.10)에 신고가 덜 들어온 2026년 9월은 제외 → 2021.09~2026.08 = 정확히 60개월</p>
+    <span class="tag">분석 방법</span>
+    <div class="grid c3">
+      <div class="card"><div class="k">01 · ㎡당 가격</div><h3>거래금액 ÷ 전용면적</h3><p>큰 평수가 많이 팔린 달에 값이 오른 것처럼 보이는 문제를 줄임</p></div>
+      <div class="card"><div class="k">02 · 중위가격</div><h3>가격순으로 세운 가운데 값</h3><p>초고가 거래 몇 건에 평균이 크게 흔들리는 문제를 피함</p></div>
+      <div class="card"><div class="k">03 · 반복매매지수</div><h3>같은 단지·비슷한 전용면적끼리 비교</h3><p>그달 어떤 집이 팔렸는지(거래 구성)의 영향을 줄인 지수. 두 달 이상 거래된 단지·평형 안의 모든 거래끼리 비교 (2021.09 = 100)</p></div>
+    </div>
+    <div class="card">
+      <div class="k">왜 03이 필요한가 — "팔린 집이 바뀌는" 착시</div>
+      <p>2025년부터 강남·서초·용산 등은 규제로 거래가 막히고 저가 지역 거래 비중이 커졌다.
+        그래서 <b>서울 전체 거래의 중위가격</b>은 2021.09 → 2026.08에 <b class="b">−4.6%</b>로 나오지만,
+        <b>같은 단지끼리 비교하면 +9.2%</b>다. 실제로 은마 77㎡는 26억 3,500만 → 34억 4,000만, 헬리오시티 85㎡는 22억 7,000만 → 28억 9,500만으로 올랐다.
+        <br>→ 구별 비교와 금리 분석은 <b class="o">반복매매지수</b>로 한다.</p>
+    </div>
+  </section>
+
+  <!-- 5. 그래프 페이지 (결과의 첫 장) -->
+  <section class="slide embed" data-embed="monthly.html?gu=용산구">
+    <span class="tag">2. 데이터 취합</span>
+    <iframe title="구별 월간 아파트 ㎡당 거래가격"></iframe>
+  </section>
+
+  <!-- 5. 서울 전체 지수 × 금리 -->
+  <section class="slide wide">
+    <span class="tag">3. 분석 결과 ① 거래가격과 거래량</span>
+    <h2>금리 급등기, 서울 아파트값은 저점까지 25% 하락</h2>
+    <div class="row">
+      <div class="chart"><div id="cSeoul"></div></div>
+      <div class="side">
+        <div class="card"><div class="k">바닥</div><div class="big">75.4</div><p>2022.12 · 2021.09 대비 −24.6%</p></div>
+        <div class="card"><div class="k">금리 고점</div><div class="big" style="color:var(--green)">4.82%</div><p>2022.10 · 1년 1개월 만에 +1.81%p</p></div>
+        <div class="card"><div class="k">2026.08</div><div class="big">109.2</div><p>5년 전보다 +9.2%, 바닥 대비 +45%</p></div>
+        <p class="note">회색 막대 = 주요 부동산 정책의 발표일 → 시행일. 집값 바닥(2022.12)은 1·3 대책(2023.01) 바로 전 달이다.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. 거래량 -->
+  <section class="slide wide">
+    <span class="tag">3. 분석 결과 ① 거래가격과 거래량</span>
+    <h2>금리 방향성에 크게 영향 받는 거래량</h2>
+    <div class="row">
+      <div class="chart"><div id="cVolume"></div></div>
+      <div class="side">
+        <div class="card"><div class="k">5년 최저</div><div class="big">558건</div><p>2022.10 · 금리 고점과 같은 달</p></div>
+        <div class="card"><div class="k">5년 최고</div><div class="big">11,270건</div><p>2025.06 · 6·27 대출 규제 직전 몰림</p></div>
+        <p class="note">2022.02 거래량은 2021.09보다 <b>−70%</b>(2,690 → 816건)였지만, 같은 때 가격지수는 <b>−4%</b>였다. 가격은 2022.07부터 본격적으로 내렸다.<br>5년 중 거래가 가장 많았던 달은 6·27 대책 발표 직전인 2025.06이었다 (회색 막대 = 정책 발표 → 시행).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9. 하락 vs 회복 -->
+  <section class="slide">
+    <span class="tag">3. 분석 결과 ② 입지별 매매가 변동 특징</span>
+    <h2>하락은 모든 지역에서, 매매가 회복 폭은 입지별로 차이가 크다</h2>
+    <div class="row">
+      <div class="chart"><div id="cDropReb"></div></div>
+      <div class="side">
+        <div class="card"><div class="k">금리 급등기 하락 (2021.11 → 2023.01)</div><p>25개 구 모두 <b class="b">−6% ~ −28%</b>. 2021년 가격 수준과의 상관 <b id="rDrop"></b> — 구별 차이가 작음</p></div>
+        <div class="card"><div class="k">저점 이후 회복 (2023.01 → 2026.08)</div><p>송파 +80%, 성동 +80% vs 금천 +11%, 도봉 +15%. 2021년 가격 수준과의 상관 <b class="o" id="rReb"></b> — <b>입지별로 회복 폭 차이가 크다</b></p></div>
+        <p class="note">→ 이 기간(2021.09~2026.08)으로 보면, 구별 격차는 하락보다 <b>회복 폭</b>에서 두드러졌다.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. 구별 5년 상승률 -->
+  <section class="slide wide">
+    <span class="tag">3. 분석 결과 ② 입지별 매매가 변동 특징</span>
+    <h2>5년간 지역별 매매가 변화 차이 : <span style="font-size:.8em;color:#555">성동구 +33%, 도봉구 −14%</span></h2>
+    <div class="row">
+      <div class="chart"><div id="cRise"></div></div>
+      <div class="side">
+        <div class="card"><div class="k">가격이 오른 지역</div><div class="big up">18개 구</div><p>한강변·도심: 성동, 송파, 용산, 동작, 종로…</p></div>
+        <div class="card"><div class="k">5년 전보다 가격이 떨어진 지역</div><div class="big down">7개 구</div><p>외곽: 도봉, 금천, 노원, 강북, 은평…</p></div>
+        <p class="note">색 = 2021.09 → 2026.08 매매가 변화율 (같은 단지·비슷한 전용면적 비교, 반복매매지수). 구 경계: 통계청 2025년 2분기 시군구 경계</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 질문2 가격대·유형 -->
+  <section class="slide">
+    <span class="tag">3. 분석 결과 ② 입지별 매매가 변동 특징</span>
+    <h2>고가의 아파트일수록 더 올랐다</h2>
+    <div class="row">
+      <div class="chart"><div id="cTier"></div></div>
+      <div class="side">
+        <table>
+          <thead><tr><th>대출 규제선 기준</th><th class="n">2026.08</th><th class="n">고점 회복</th></tr></thead>
+          <tbody id="tierTable"></tbody>
+        </table>
+        <p class="note">가격대 = 단지·평형의 출발 시점(2021.09~2022.08) 중위 거래가. 고점 회복 = 2021.09~2022.06 중위가를 2026.03~08 중위가가 넘은 단지·평형 비율.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 번외: 연식 10구간 × 용적률 10구간 -->
+  <section class="slide">
+    <span class="tag">3. 분석 결과 ③ 단지 특성 별 매매가 변동 특징</span>
+    <h2>준공 연도 × 용적률: 저밀도의 40년 이상 노후 아파트 매매가 상승폭이 가장 컸다</h2>
+    <div class="row">
+      <div class="chart"><div id="cCross10"></div></div>
+      <div class="side">
+        <div class="k" style="font-weight:900;color:var(--accent)">연식별 · 용적률별 특징 (2021.09 → 2026.08)</div>
+        <table class="mini">
+          <thead><tr><th>구분</th><th class="n">5년 변화</th><th class="n">저점</th><th class="n">2024.07 이후</th></tr></thead>
+          <tbody id="traitTable"></tbody>
+        </table>
+        <p class="note"><b>30세대 이상 단지.</b> 준공 연도 5년 · 용적률 50%p 간격(용적률은 이상~미만). 왼쪽 연도·위 용적률은 칸 경계 표시: ~1980년 = 선 위쪽이 1980년까지 준공, ~100% = 선 왼쪽이 용적률 100% 미만. 가로 점선 = 1996 · 2006 · 2016년. 칸 = 2021.09 → 2026.08 변화율과 계산에 쓰인 거래 건수.
+          <b>1,500건 미만 칸은 흐리게</b>, 200건 미만이거나 2021.09 거래와 이어지지 않는 칸(예: 2021년 이후 준공 일부)은 빈칸.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 결론 (단지 사례 포함, 한 장) -->
+  <section class="slide concl dense">
+    <span class="tag">4. 결론</span>
+    <h2>결론</h2>
+    <div class="grid c3" style="grid-template-columns:1fr .9fr 1.2fr">
+      <div class="card"><div class="k">① 거래가격과 거래량</div><h3>급락 후 회복, 5년간 +9.2%</h3>
+        <p>저점(2022.12) <b class="b">−24.6%</b> → 2026.08 <b class="up">+9.2%</b><br>거래량은 금리 방향에 크게 반응</p></div>
+      <div class="card"><div class="k">② 입지별</div><h3>회복 폭은 입지별로 크게 달랐다</h3>
+        <p>18개 구 상승 · 7개 구 하락<br>성동 <b class="up">+33.4%</b> ~ 도봉 <b class="down">−14.1%</b></p></div>
+      <div class="card"><div class="k">③ 단지 특성별</div><h3>40년 이상 저밀도 단지 상승폭 최대</h3>
+        <p>40년 이상 구축 아파트 상승률 <b class="up">+22.3%</b> vs 30년 이상 +1.2%<br>용적률 150% 미만 2024.07 이후 <b class="up">+34.2%</b> vs 300% 이상 +22.6%</p></div>
+    </div>
+    <div class="row concl-body">
+      <table style="flex:1.4">
+        <thead><tr><th>단지 사례 · 평형</th><th>구</th><th class="n">2021년 가을</th><th class="n">2026년 여름</th><th class="n">변화</th></tr></thead>
+        <tbody>
+        <tr><td>래미안퍼스티지 85㎡</td><td>서초구</td><td class="n">36억</td><td class="n">54억 5,000만</td><td class="n up">+51%</td></tr>
+        <tr><td>은마 77㎡</td><td>강남구</td><td class="n">26억 3,500만</td><td class="n">34억 4,000만</td><td class="n up">+31%</td></tr>
+        <tr><td>헬리오시티 85㎡</td><td>송파구</td><td class="n">22억 7,000만</td><td class="n">28억 9,500만</td><td class="n up">+28%</td></tr>
+        <tr><td>마포래미안푸르지오2단지 85㎡</td><td>마포구</td><td class="n">19억 4,000만</td><td class="n">24억 7,000만</td><td class="n up">+27%</td></tr>
+        <tr><td>상계주공6(고층) 58㎡</td><td>노원구</td><td class="n">9억 1,300만</td><td class="n">8억</td><td class="n down">−12%</td></tr>
+        <tr><td>상계주공9(고층) 50㎡</td><td>노원구</td><td class="n">7억 1,000만</td><td class="n">6억 800만</td><td class="n down">−14%</td></tr>
+      </tbody>
+      </table>
+      <div class="card concl-sum" style="flex:1;border-color:var(--accent)">
+        <div class="k">한 줄 요약</div>
+        <p style="font-weight:400;color:var(--ink);font-size:calc(var(--u)*1.04)">지난 5년 서울 아파트값은 금리 급등기에 전체 하락(−24.6%) 후 점차 회복해
+          2026.08 기준 5년 전보다 <span style="color:var(--red)">9.2%</span> 상승한 추세이다. 그러나 세부적으로 들여다보면
+          상승의 크기와 내용은 단지 특성에 따라 차이가 있다.</p>
+        <ul style="margin-top:calc(var(--u)*.4)">
+          <li><b>입지</b> : 성동구 <b class="up">+33.4%</b> ~ 도봉구 <b class="down">−14.1%</b></li>
+          <li><b>가격대</b> : 25억 초과 <b class="up">+31.1%</b> ~ 9억 이하 +0.3%</li>
+          <li><b>용적률 및 연식</b> : 저밀도의 40년 이상 노후 아파트 매매가 최대 상승폭</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note">단지 사례 = 각 시기(2021.09~11, 2026.06~08) 같은 단지·같은 평형 거래의 중위 거래가.</p>
+  </section>
+
+  <!-- 13. 한계 -->
+  <section class="slide">
+    <span class="tag">4. 결론</span>
+    <h2>한계와 시사점</h2>
+    <div class="grid c3">
+      <div class="card"><div class="k">1 · 금리와 매매가</div><h3>금리는 참고 지표</h3><p>금리 급등기(2021.09~2022.10)에는 금리 상승과 매매가 하락이 뚜렷하게 함께 나타났다. 그 뒤로는 대출 규제·토지거래허가·공급·재건축 기대 등 여러 변수가 함께 작용해, 이번 분석에서 금리는 <b>참고용 지표</b>로만 볼 수 있다.</p></div>
+      <div class="card"><div class="k">2 · 시중금리 자료</div><h3>신규 대출 금리만 반영</h3><p>주담대 금리는 예금은행 <b>신규취급액</b> 기준이다. 기존 대출자의 금리, 변동·고정금리 비중, DSR 같은 대출 한도 등 실제 부담을 바꾸는 변수는 반영하지 못했다.</p></div>
+      <div class="card"><div class="k">3 · 데이터의 범위</div><h3>5년, 한 번의 순환</h3><p>분석의 범위를 2021.09~2026.08 60개월로 다루어, 시작점에 따라 현 시점의 변동 크기가 달라질 수 있다.</p></div>
+      <div class="card"><div class="k">4 · 가격 지표</div><h3>같은 단지·평형 비교의 한계</h3><p>두 달 이상 거래된 단지·평형만 반영하고, 동·호수가 공개되지 않아 층·향 차이가 섞인다. 거래가 적은 달·구간은 값이 흔들릴 수 있다. 다만 2022년 서울 연간 −21.7%로 한국부동산원 실거래가격지수(−21.78%)와 거의 같았다.</p></div>
+      <div class="card" style="border-color:var(--accent)"><div class="k">5 · 시사점</div><h3>평균이 아니라 차이를 봐야 한다</h3><p>서울 전체로는 5년간 +9.2%지만, 구별(성동 +33% ~ 도봉 −14%)·가격대·단지 특성별로 결과가 크게 다르게 나타났다. '서울시' 전체의 집값이 아닌 <b>단지별 특성과 차이를 고려한</b> 정책과 시장 판단이 필요하다.</p></div>
+    </div>
+  </section>
+
+  <nav class="nav">
+    <button id="prev" aria-label="이전">‹</button>
+    <button id="next" aria-label="다음">›</button>
+    <span class="title">2021~2026년 서울 아파트 매매가 변화 분석 · 2021.09–2026.08</span>
+    <div class="progress"><div id="bar"></div></div>
+    <span class="counter" id="counter"></span>
+  </nav>
+</div>
+
+<script>
+  const slides = [...document.querySelectorAll(".slide")];
+  const stage = document.getElementById("stage");
+  let cur = 0;
+  const drawn = new Set();
+
+  function show(i) {
+    cur = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, k) => s.classList.toggle("active", k === cur));
+    document.getElementById("prev").disabled = cur === 0;
+    document.getElementById("next").disabled = cur === slides.length - 1;
+    document.getElementById("bar").style.width = ((cur + 1) / slides.length * 100) + "%";
+    document.getElementById("counter").textContent = `${cur + 1} / ${slides.length}`;
+    history.replaceState(null, "", "#" + (cur + 1));
+    const s = slides[cur];
+    if (s.dataset.embed) { const f = s.querySelector("iframe"); if (!f.src) f.src = s.dataset.embed; }
+    renderCharts(s);
+  }
+  document.getElementById("prev").onclick = () => show(cur - 1);
+  document.getElementById("next").onclick = () => show(cur + 1);
+  document.addEventListener("keydown", e => {
+    if (["ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); show(cur + 1); }
+    if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); show(cur - 1); }
+  });
+
+  // ---------- 차트 ----------
+  const C = { ink: "#1d1d1f", grid: "#ece9e2", price: "#f26b1d", rate: "#03c75a", up: "#c0392b", down: "#2b5c8a" };
+  const U = () => stage.clientWidth / 100;
+  const fs = k => Math.max(10, Math.round(U() * k));
+  const base = (extra = {}) => Object.assign({
+    font: { family: "Noto Sans KR, system-ui, sans-serif", size: fs(.95), color: C.ink },
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    margin: { l: U() * 4.5, r: U() * 4.5, t: U() * 2.6, b: U() * 3.4 },
+    legend: { orientation: "h", x: 0, y: 1.1, font: { size: fs(.85) } },
+    hoverlabel: { bgcolor: "#fff", bordercolor: "#555", font: { color: "#111", size: fs(.9) } },
+  }, extra);
+  const CFG = { displayModeBar: false, responsive: true };
+  const ym = m => m.replace("-", ".");
+  const phaseShapes = D => D.phases.map((p, i) => ({ type: "rect", xref: "x", yref: "paper", x0: p.start, x1: p.end, y0: 0, y1: 1,
+    fillcolor: i % 2 ? "rgba(43,92,138,.06)" : "rgba(242,107,29,.07)", line: { width: 0 }, layer: "below" }));
+  const phaseLabels = D => D.phases.map(p => ({ xref: "x", yref: "paper", x: p.start, y: 1, xanchor: "left", yanchor: "top",
+    text: `<b>${p.id}</b> ${p.name}`, showarrow: false, font: { size: fs(.8), color: "#8a5a3a" } }));
+  // 주요 부동산 정책 시점 (국토교통부·금융위원회 발표 기준, 2026년은 공식 확인 전이라 제외)
+  // 주요 부동산 정책: 발표일 → 시행일 (국토교통부·금융위원회 발표 기준, 2026년은 공식 확인 전이라 제외)
+  const POLICIES = [
+    ["2021-10-26", "2022-01-01", "가계부채 대책(DSR 2단계)"],
+    ["2022-11-10", "2022-11-14", "규제지역 대거 해제"],
+    ["2023-01-03", "2023-01-05", "1·3 대책"],
+    ["2023-12-27", "2024-02-26", "스트레스 DSR 1단계"],
+    ["2025-03-19", "2025-03-24", "토허제 확대"],
+    ["2025-06-27", "2025-06-28", "6·27 대책"],
+    ["2025-10-15", "2025-10-20", "10·15 대책"],
+  ];
+  const DAY = 864e5, MIN_DAYS = 12;   // 하루 만에 시행된 정책도 보이도록 막대 최소 폭
+  const plusDays = (d, n) => new Date(new Date(d).getTime() + n * DAY).toISOString().slice(0, 10);
+  const barEnd = (a, b) => (new Date(b) - new Date(a)) / DAY < MIN_DAYS ? plusDays(a, MIN_DAYS) : b;
+  const md = d => d.slice(5).replace("-", ".");
+  const policyShapes = () => POLICIES.map(([a, b]) => ({ type: "rect", xref: "x", yref: "paper", x0: a, x1: barEnd(a, b), y0: 0, y1: .9,
+    fillcolor: "rgba(80,80,90,.16)", line: { color: "rgba(80,80,90,.45)", width: 1 }, layer: "below" }));
+  const policyLabels = () => POLICIES.map(([a, b, t], i) => ({ xref: "x", yref: "paper", x: a, y: [.02, .11, .2][i % 3],
+    xanchor: "left", yanchor: "bottom", text: `<b>${t}</b><br>${a.slice(2, 4)}.${md(a)} 발표 → ${b.slice(2, 4)}.${md(b)} 시행`,
+    showarrow: false, align: "left", bgcolor: "rgba(255,255,255,.55)", borderpad: 2,
+    font: { size: fs(.66), color: "#3a3a40" } }));
+  const rateAxis = () => ({ overlaying: "y", side: "right", showgrid: false, ticksuffix: "%", zeroline: false,
+    range: [2.5, 5.0], dtick: 0.5,
+    title: { text: "주담대 금리", font: { color: C.rate } }, tickfont: { color: C.rate } });
+  // 눈금: 2021.09부터 6개월마다 + 마지막 달 2026.08 (양 끝이 보이도록 범위를 보름씩 넓힘)
+  const TICKS = ["2021-09", "2022-03", "2022-09", "2023-03", "2023-09", "2024-03", "2024-09", "2025-03", "2025-09", "2026-03", "2026-08"];
+  const dateAxis = () => ({ type: "date", tickvals: TICKS, ticktext: TICKS.map(t => t.replace("-", ".")), range: ["2021-08-17", "2026-08-16"],
+    gridcolor: C.grid, hoverformat: "%Y.%m" });
+  const rateTrace = D => ({ x: D.months, y: D.rate, name: "주담대 금리 (오른쪽)", yaxis: "y2", type: "scatter", mode: "lines",
+    line: { color: C.rate, width: 2.5 }, hovertemplate: "%{y:.2f}%<extra>금리</extra>" });
+
+  const SEG_COLORS = ["#7f9cc4", "#e8a07f", "#c8553d", "#7a1712"];
+  // 연식 5구간: 오래될수록 진한 빨강 → 새것일수록 파랑
+  const AGE5_COLORS = ["#7a1712", "#c8553d", "#e8a07f", "#7f9cc4", "#2b4f7a"];
+  // 용적률 5구간: 낮을수록 파랑 → 높을수록 진한 빨강
+  const FAR5_COLORS = ["#2b4f7a", "#7f9cc4", "#e8a07f", "#c8553d", "#7a1712"];
+  const segChart = (D, key) => {
+    const G = D.segments.groups[key], M = D.segments.months;
+    Plotly.newPlot("cSeg_" + key, G.map((t, k) => ({
+      x: M, y: t.index, name: t.name, type: "scatter", mode: "lines", line: { color: (key === "연식5" ? AGE5_COLORS : key === "용적률5" ? FAR5_COLORS : SEG_COLORS)[k], width: 3 },
+      hovertemplate: "%{y:.1f}<extra>" + t.name + "</extra>",
+    })), base({ xaxis: dateAxis(), yaxis: { gridcolor: C.grid, title: { text: "2021.09 = 100" }, zeroline: false },
+                hovermode: "x unified", shapes: phaseShapes(D), annotations: phaseLabels(D),
+                // 선이 5개면 범례가 두 줄이 되므로 위 여백을 늘림
+                ...(G.length > 4 ? { margin: { l: U() * 4.5, r: U() * 1.5, t: U() * 4.6, b: U() * 3.4 }, legend: { orientation: "h", x: 0, y: 1.2, font: { size: fs(.85) } } } : {}) }), CFG);
+  };
+  // 연식 × 용적률 격자. showText=false 이면 칸에 숫자 없이 색만 (마우스를 올리면 숫자·거래 건수)
+  const crossChart = (id, X, showText) => {
+    const lim = 30;
+    const z = X.now.map(r => r.map(v => v == null ? null : v - 100));
+    const label = X.now.map((r, i) => r.map((v, j) => v == null ? `자료 부족 (${X.pairs[i][j].toLocaleString()}건)` :
+      `<b>${v >= 100 ? "+" : ""}${(v - 100).toFixed(1)}%</b><br>(${X.pairs[i][j].toLocaleString()}건)`));
+    // 거래가 적은 칸은 흰 막으로 흐리게
+    const weak = [];
+    X.pairs.forEach((r, i) => r.forEach((n, j) => { if (n < X.min_pairs) weak.push({ type: "rect", xref: "x", yref: "y",
+      x0: j - .5, x1: j + .5, y0: i - .5, y1: i + .5, fillcolor: "rgba(250,250,247,.65)", line: { width: 0 } }); }));
+    Plotly.newPlot(id, [{
+      type: "heatmap", x: X.cols.map((c, j) => j), y: X.rows.map((r, i) => i), z, zmid: 0, zmin: -lim, zmax: lim,
+      colorscale: [[0, "#1f3a68"], [.3, "#7f9cc4"], [.5, "#f7f6f2"], [.7, "#e8907f"], [1, "#a8231a"]],
+      // 칸 안 숫자: 5구간은 크게, 10구간은 작게 (10구간의 빈칸은 글자 없이)
+      text: label.map((r, i) => r.map((t, j) => (showText || X.now[i][j] != null) ? t : "")),
+      texttemplate: "%{text}", textfont: { size: fs(showText ? 1 : .6) },
+      xgap: showText ? 3 : 2, ygap: showText ? 3 : 2, hoverongaps: false,
+      colorbar: { title: { text: "5년 변화율<br>(2021.09→2026.08)", side: "top", font: { size: fs(.75) } },
+                  ticksuffix: "%", thickness: Math.round(U() * .7), len: .7, outlinewidth: 0, tickfont: { size: fs(.75) } },
+      customdata: X.rows.map((r, i) => X.cols.map((c, j) => [r, c, label[i][j]])),
+      hovertemplate: "준공 %{customdata[0]} · 용적률 %{customdata[1]}<br>%{customdata[2]}<extra></extra>",
+    }], base({ shapes: showText ? weak : [...weak, ...bandLines(X)], annotations: showText ? [] : bandLabels(X),
+      // 10구간 격자: 용적률도 칸 경계(시작점)에 표시 — 경계선 = 그 용적률부터 오른쪽 칸
+      xaxis: showText
+        ? { tickvals: X.cols.map((c, j) => j), ticktext: X.cols, side: "top", title: { text: "용적률" },
+            showgrid: false, zeroline: false, tickfont: { size: fs(.95) } }
+        : { tickvals: X.cols.slice(1).map((c, j) => j + .5), ticktext: X.cols.slice(1).map(c => "~" + parseInt(c) + "%"),
+            range: [-.5, X.cols.length - .5], side: "top", title: { text: "용적률" }, ticks: "",
+            showgrid: false, zeroline: false, tickfont: { size: fs(.78) } },
+      // 10구간 격자: 연도를 칸 가운데가 아니라 칸 경계에 표시 (경계선 = 그해부터 아래 칸)
+      yaxis: showText
+        ? { tickvals: X.rows.map((r, i) => i), ticktext: X.rows.map(r => r.replace(" (", "<br>(")), autorange: "reversed",
+            showgrid: false, zeroline: false, tickfont: { size: fs(.95) } }
+        : { tickvals: X.rows.slice(1).map((r, i) => i + .5), ticktext: X.rows.slice(1).map(r => "~" + (parseInt(r) - 1) + "년"),
+            range: [X.rows.length - .5, -.5], showgrid: false, zeroline: false, ticks: "",
+            tickfont: { size: fs(.78) } },
+      margin: { l: U() * (showText ? 10 : 11), r: U() * 1, t: U() * 4.2, b: U() * 1 } }), CFG);
+  };
+  // 가로 점선: 1996 · 2006 · 2016년 경계
+  const BANDS = [["노후", 0, 3], ["구축", 4, 5], ["준신축", 6, 7], ["신축", 8, 9]];
+  const bandLines = X => BANDS.slice(1).map(([, a]) => ({ type: "line", xref: "paper", yref: "y", x0: 0, x1: 1, y0: a - .5, y1: a - .5,
+    line: { color: "#9a9a9a", width: 1.2, dash: "dash" } }));
+  const bandLabels = X => [
+    { xref: "paper", yref: "paper", x: -.02, y: 1, xanchor: "right", yanchor: "bottom", text: "<b>준공 연도</b>", showarrow: false,
+      font: { size: fs(.85), color: "#1d1d1f" } },
+  ];
+  const charts = {
+    cSeoul: D => Plotly.newPlot("cSeoul", [
+      { x: D.months, y: D.index, name: "서울 아파트값 (반복매매지수, 2021.09=100)", type: "scatter", mode: "lines",
+        line: { color: C.price, width: 3.5 }, hovertemplate: "%{y:.1f}<extra>지수</extra>" },
+      rateTrace(D),
+    ], base({ xaxis: dateAxis(), yaxis: { gridcolor: C.grid, zeroline: false, title: { text: "2021.09 = 100" } }, yaxis2: rateAxis(),
+              shapes: [...phaseShapes(D), ...policyShapes()], annotations: [...phaseLabels(D), ...policyLabels()], hovermode: "x unified" }), CFG),
+    cVolume: D => Plotly.newPlot("cVolume", [
+      { x: D.months, y: D.volume, name: "월별 거래 건수", type: "bar", marker: { color: "rgba(242,107,29,.6)" },
+        hovertemplate: "%{y:,}건<extra></extra>" },
+      rateTrace(D),
+    ], base({ xaxis: dateAxis(), yaxis: { gridcolor: C.grid, tickformat: ",", zeroline: false }, yaxis2: rateAxis(),
+              shapes: [...phaseShapes(D), ...policyShapes()], annotations: [...phaseLabels(D), ...policyLabels()], bargap: .15, hovermode: "x unified" }), CFG),
+    cRise: D => {
+      // 서울 25개 구 단계구분도: 색 = 5년 매매가 변화율 (빨강 상승 · 네이비 하락, 0% = 흰색)
+      const gs = Object.keys(D.gu), z = gs.map(g => D.gu[g].rise);
+      const lim = Math.ceil(Math.max(...z.map(Math.abs)));
+      const lab = gs.map(g => D.gu_label[g]);
+      Plotly.newPlot("cRise", [
+        {
+          type: "choropleth", geojson: D.gu_geo, featureidkey: "properties.gu", locations: gs, z,
+          zmin: -lim, zmax: lim,
+          colorscale: [[0, "#1f3a68"], [.3, "#7f9cc4"], [.5, "#f7f6f2"], [.7, "#e8907f"], [1, "#a8231a"]],
+          marker: { line: { color: "#ffffff", width: 1.2 } },
+          colorbar: { title: { text: "5년 변화", side: "top", font: { size: fs(.8) } }, ticksuffix: "%",
+                      thickness: Math.round(U() * .7), len: .6, x: .98, outlinewidth: 0, tickfont: { size: fs(.75) } },
+          hovertemplate: "<b>%{location}</b><br>5년 변화 %{z:+.1f}%<extra></extra>",
+        },
+        {
+          // 구 이름 + 변화율 글자
+          type: "scattergeo", mode: "text", lon: lab.map(p => p[0]), lat: lab.map(p => p[1]),
+          text: gs.map(g => `<b>${g.replace(/구$/, "")}</b><br>${(D.gu[g].rise > 0 ? "+" : "") + D.gu[g].rise.toFixed(1)}%`),
+          textfont: { size: fs(.78), color: gs.map(g => Math.abs(D.gu[g].rise) > lim * .55 ? "#ffffff" : "#1d1d1f") },
+          hoverinfo: "skip",
+        },
+      ], base({
+        // 서울 경계에 딱 맞춘 범위 (fitbounds 보다 여백이 적어 지도가 크게 보임)
+        geo: { visible: false, projection: { type: "mercator" }, bgcolor: "rgba(0,0,0,0)",
+               lonaxis: { range: [126.76, 127.19] }, lataxis: { range: [37.425, 37.705] } },
+        margin: { l: 0, r: 0, t: 0, b: 0 },
+      }), CFG);
+    },
+    cYearly: D => {
+      const gs = Object.keys(D.gu).sort((a, b) => D.gu[b].rise - D.gu[a].rise);
+      const rows = ["서울 전체", ...gs], z = [D.yearly_seoul, ...gs.map(g => D.yearly[g])];
+      const lim = Math.ceil(Math.max(...z.flat().map(Math.abs)));
+      Plotly.newPlot("cYearly", [{
+        type: "heatmap", x: D.years, y: rows, z, zmid: 0, zmin: -lim, zmax: lim,
+        colorscale: [[0, "#1f3a68"], [.35, "#9fb4d4"], [.5, "#f7f6f2"], [.65, "#efab9c"], [1, "#a8231a"]],
+        text: z.map(r => r.map(v => (v > 0 ? "+" : "") + v.toFixed(1))), texttemplate: "%{text}",
+        textfont: { size: fs(.68) }, xgap: 2, ygap: 1, showscale: false,
+        hovertemplate: "%{y} · %{x}<br>%{z:+.1f}%<extra></extra>",
+      }], base({ yaxis: { autorange: "reversed", tickfont: { size: fs(.72) } }, xaxis: { side: "top", tickfont: { size: fs(.8) } },
+                 margin: { l: U() * 4.8, r: U() * .5, t: U() * 2.2, b: U() * .5 } }), CFG);
+    },
+    cTier: D => {
+      const T = D.segments.groups["가격대"], M = D.segments.months;
+      const colors = ["#7f9cc4", "#e8a07f", "#c8553d", "#7a1712"];
+      Plotly.newPlot("cTier", T.map((t, k) => ({
+        x: M, y: t.index, name: t.name, type: "scatter", mode: "lines", line: { color: colors[k], width: 2.4 },
+        hovertemplate: "%{y:.1f}<extra>" + t.name + "</extra>",
+      })), base({ xaxis: dateAxis(), yaxis: { gridcolor: C.grid, title: { text: "2021.09 = 100" }, zeroline: false },
+                  hovermode: "x unified", shapes: phaseShapes(D), annotations: phaseLabels(D) }), CFG);
+    },
+    cSeg_평형: D => segChart(D, "평형"),
+    cSeg_건축연도: D => segChart(D, "건축연도"),
+    cSeg_용적률: D => segChart(D, "용적률"),
+    cSeg_연식5: D => segChart(D, "연식5"),
+    cSeg_용적률5: D => segChart(D, "용적률5"),
+    cCross: D => crossChart("cCross", D.segments.cross_built_far, true),
+    cCross10: D => crossChart("cCross10", D.segments.cross10, false),
+    cComplex: D => {
+      const S = D.segments.complex_scatter, lim = 40;
+      const jit = S.built.map((b, i) => b + ((i * 37) % 11 - 5) / 14);   // 같은 해 단지가 겹치지 않게 살짝 흩뜨림
+      Plotly.newPlot("cComplex", [{
+        type: "scatter", mode: "markers", x: jit, y: S.far,
+        marker: { size: fs(.62), color: S.chg, cmin: -lim, cmax: lim, cmid: 0,
+                  colorscale: [[0, "#1f3a68"], [.3, "#7f9cc4"], [.5, "#e9e7e1"], [.7, "#e8907f"], [1, "#a8231a"]],
+                  line: { width: .8, color: "#fff" },
+                  colorbar: { title: { text: "가격 변화", side: "top", font: { size: fs(.8) } }, ticksuffix: "%",
+                              thickness: Math.round(U() * .7), len: .7, outlinewidth: 0, tickfont: { size: fs(.75) } } },
+        customdata: S.name.map((n, i) => [n, S.gu[i], S.built[i], S.chg[i]]),
+        hovertemplate: "<b>%{customdata[0]}</b> (%{customdata[1]})<br>준공 %{customdata[2]}년 · 용적률 %{y:.0f}%<br>" +
+                       "㎡당 중위가 변화 <b>%{customdata[3]:+.1f}%</b><extra></extra>",
+      }], base({
+        xaxis: { title: { text: "준공 연도" }, showgrid: false, dtick: 5, zeroline: false },
+        yaxis: { title: { text: "용적률 (%)" }, type: "log", showgrid: false, tickvals: [100, 150, 200, 250, 300, 400, 600, 1000], ticksuffix: "%" },
+        // 구역 경계: 연식 5구간(1986·1996·2006·2016년) × 용적률 5구간(150·200·250·300%)
+        shapes: [
+          ...[1986.5, 1996.5, 2006.5, 2016.5].map(x => ({ type: "line", xref: "x", yref: "paper", x0: x, x1: x, y0: 0, y1: 1, line: { color: "#777", width: 1, dash: "dot" } })),
+          ...[150, 200, 250, 300].map(y => ({ type: "line", xref: "paper", yref: "y", x0: 0, x1: 1, y0: y, y1: y, line: { color: "#777", width: 1, dash: "dot" } })),
+        ],
+        annotations: [["40년 이상", 1980], ["30년 이상", 1991.5], ["20년 이상", 2001.5], ["10년 이상", 2011.5], ["10년 미만", 2020]].map(([t, x]) => ({
+          xref: "x", yref: "paper", x, y: 1, yanchor: "bottom", showarrow: false, text: t, font: { size: fs(.75), color: "#555" } })),
+        margin: { l: U() * 5, r: U() * 1, t: U() * 2.4, b: U() * 3.6 } }), CFG);
+    },
+    cDropReb: D => {
+      const gs = Object.keys(D.gu);
+      Plotly.newPlot("cDropReb", [{
+        type: "scatter", mode: "markers", x: gs.map(g => D.gu[g].lvl), y: gs.map(g => D.gu[g].rebound),
+        text: gs,
+        marker: { size: gs.map(g => Math.abs(D.gu[g].drop) * U() * .08 + 6), color: gs.map(g => D.gu[g].rise >= 0 ? C.up : C.down),
+                  opacity: .45, line: { width: 1, color: "#fff" } },
+        customdata: gs.map(g => [D.gu[g].drop, D.gu[g].rise]),
+        hovertemplate: "<b>%{text}</b><br>" +
+          "2021년 ㎡당 중위가격 <b>%{x:,.0f}만원</b><br>" +
+          "금리 급등기 하락 <span style='color:#1f3a68'><b>%{customdata[0]:.1f}%</b></span><br>" +
+          "저점 이후 회복 <span style='color:#1f3a68'><b>+%{y:.1f}%</b></span><br>" +
+          "5년 변화 <span style='color:#1f3a68'><b>%{customdata[1]:+.1f}%</b></span><extra></extra>",
+        hoverlabel: { bgcolor: "#fff", bordercolor: "#1f3a68", font: { color: "#1d1d1f", size: fs(1) } },
+      }], base({ xaxis: { title: { text: "2021년 ㎡당 중위가격 (만원, 2021.09~11)" }, gridcolor: C.grid, tickformat: "," },
+                 yaxis: { title: { text: "저점(2023.01) 이후 회복률 (%)" }, gridcolor: C.grid, ticksuffix: "%" },
+                 margin: { l: U() * 4.5, r: U() * 1.5, t: U() * 1.5, b: U() * 4 } }), CFG).then(placeLabels);
+    },
+  };
+
+  // 산점도 구 이름: 서로·점과 겹치지 않는 자리를 골라 annotation 으로 붙임 (멀리 옮기면 가는 선으로 연결)
+  function placeLabels(gd) {
+    const L = gd._fullLayout, xa = L.xaxis, ya = L.yaxis, tr = gd.data[0], f = fs(.8);
+    const pts = tr.x.map((x, i) => ({ i, px: xa._offset + xa.l2p(x), py: ya._offset + ya.l2p(tr.y[i]),
+      r: tr.marker.size[i] / 2, w: tr.text[i].length * f * 1.05 + 10, h: f * 1.5 }));
+    const boxes = [], hit = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+    const inPlot = b => b.x0 >= xa._offset && b.x1 <= xa._offset + xa._length && b.y0 >= ya._offset && b.y1 <= ya._offset + ya._length;
+    const dirs = [[0, -1], [0, 1], [1, 0], [-1, 0], [1, -1], [-1, -1], [1, 1], [-1, 1]];
+    const ann = [];
+    [...pts].sort((a, b) => b.r - a.r).forEach(p => {
+      let best = null;
+      for (const step of [0, 1, 2, 3, 4, 6]) {
+        for (const [dx, dy] of dirs) {
+          const gap = p.r + 3 + step * f;
+          const cx = p.px + dx * (gap + (dx ? p.w / 2 : 0)), cy = p.py + dy * (gap + (dy ? p.h / 2 : 0));
+          const b = { x0: cx - p.w / 2, x1: cx + p.w / 2, y0: cy - p.h / 2, y1: cy + p.h / 2 };
+          if (!inPlot(b) || boxes.some(o => hit(o, b))) continue;
+          const onDot = pts.some(q => { const nx = Math.max(b.x0, Math.min(q.px, b.x1)), ny = Math.max(b.y0, Math.min(q.py, b.y1));
+            return (nx - q.px) ** 2 + (ny - q.py) ** 2 < (q.r * .8) ** 2; });
+          if (onDot) continue;
+          best = { b, cx, cy, step }; break;
+        }
+        if (best) break;
+      }
+      if (!best) { const cx = p.px, cy = p.py - p.r - p.h; best = { b: { x0: cx - p.w / 2, x1: cx + p.w / 2, y0: cy - p.h / 2, y1: cy + p.h / 2 }, cx, cy, step: 9 }; }
+      boxes.push(best.b);
+      ann.push({ x: tr.x[p.i], y: tr.y[p.i], xref: "x", yref: "y", text: tr.text[p.i], font: { size: f, color: "#1d1d1f" },
+        showarrow: true, arrowhead: 0, arrowwidth: best.step >= 2 ? .8 : 0.01, arrowcolor: best.step >= 2 ? "#999" : "rgba(0,0,0,0)",
+        ax: best.cx - p.px, ay: best.cy - p.py, standoff: p.r, bgcolor: "rgba(255,255,255,.7)", borderpad: 1 });
+    });
+    Plotly.relayout(gd, { annotations: ann });
+  }
+
+  function renderCharts(s) {
+    const D = window.DECK;
+    if (!D || !window.Plotly) return;
+    s.querySelectorAll(".chart > div[id]").forEach(el => {
+      if (!drawn.has(el.id)) { charts[el.id](D); drawn.add(el.id); }
+      else Plotly.Plots.resize(el);
+    });
+  }
+
+  window.addEventListener("load", () => {
+    const D = window.DECK;
+    if (D) {
+      (document.getElementById("phaseTable") || {}).innerHTML = D.phases.map(p =>
+        `<tr><td>${p.id} ${p.name}<br><span class="note">${ym(p.start)}–${ym(p.end)}</span></td>` +
+        `<td class="n">${p.d_rate > 0 ? "+" : ""}${p.d_rate.toFixed(2)}%p</td>` +
+        `<td class="n ${p.d_price >= 0 ? "up" : "down"}">${p.d_price > 0 ? "+" : ""}${p.d_price.toFixed(1)}%</td></tr>`).join("");
+      document.getElementById("rDrop").textContent = D.corr_lvl_drop.toFixed(2);
+      document.getElementById("rReb").textContent = D.corr_lvl_reb.toFixed(2);
+      (document.getElementById("cLag2") || {}).textContent = D.lag3[2].toFixed(2);
+      (document.getElementById("corrAll") || {}).textContent = D.lag3[2].toFixed(2);
+      (document.getElementById("corrEx") || {}).textContent = D.lag3_ex2022[2].toFixed(2);
+      const SG = D.segments;
+      if (document.getElementById("tierTable")) document.getElementById("tierTable").innerHTML = SG.groups["가격대"].map(t =>
+        `<tr><td>${t.name}</td><td class="n ${t.now >= 100 ? "up" : "down"}">${t.now.toFixed(1)}</td><td class="n">${SG.recovery.by_price[t.name].toFixed(1)}%</td></tr>`).join("");
+      const REC = { 평형: "by_area", 건축연도: "by_built", 용적률: "by_far", 연식5: "by_age5", 용적률5: "by_far5" };
+      Object.entries(REC).forEach(([key, rk]) => {
+        const tb = document.getElementById("segTable_" + key), G = SG.groups[key];
+        if (!tb || !G) return;
+        tb.innerHTML = G.map(t => `<tr><td>${t.name}</td><td class="n ${t.now >= 100 ? "up" : "down"}">${t.now.toFixed(1)}</td>` +
+          `<td class="n">${(SG.recovery[rk] || {})[t.name] ?? "–"}%</td></tr>`).join("");
+        const lo = G.reduce((a, b) => a.trough < b.trough ? a : b), hi = G.reduce((a, b) => a.now > b.now ? a : b);
+        const fast = G.reduce((a, b) => a.since_2407 > b.since_2407 ? a : b);
+        document.getElementById("segNote_" + key).innerHTML =
+          `저점이 가장 깊었던 구간: <b>${lo.name}</b> ${lo.trough} (${ym(lo.trough_month)})<br>` +
+          `2026.08 가장 높은 구간: <b>${hi.name}</b> ${hi.now}<br>` +
+          `2024.07 이후 가장 많이 오른 구간: <b>${fast.name}</b> +${fast.since_2407}%`;
+      });
+      if (document.getElementById("farCov") && SG.far_coverage) document.getElementById("farCov").textContent = `용적률을 찾은 거래 ${SG.far_coverage}%.`;
+      const X = SG.cross_built_far;
+      if (X && document.getElementById("crossNote")) {
+        const cells = [];
+        X.now.forEach((r, i) => r.forEach((v, j) => { if (v != null && X.pairs[i][j] >= X.min_pairs) cells.push({ v, b: X.rows[i], f: X.cols[j] }); }));
+        const hi = cells.reduce((a, b) => a.v > b.v ? a : b), lo = cells.reduce((a, b) => a.v < b.v ? a : b);
+        const f = v => `${v >= 100 ? "+" : ""}${(v - 100).toFixed(1)}%`;
+        document.getElementById("crossNote").innerHTML =
+          `가장 많이 오른 칸: <b>${hi.b} · ${hi.f}</b> <b class="${hi.v >= 100 ? "up" : "down"}">${f(hi.v)}</b><br>` +
+          `가장 덜 오른 칸: <b>${lo.b} · ${lo.f}</b> <b class="${lo.v >= 100 ? "up" : "down"}">${f(lo.v)}</b><br>` +
+          `${X.rows[0]} · ${X.cols[0]}: ${X.now[0][0] == null ? "자료 부족" : f(X.now[0][0])} (${X.pairs[0][0].toLocaleString()}건)`;
+      }
+      if (document.getElementById("traitTable")) {
+        const pc = v => `${v >= 100 ? "+" : ""}${(v - 100).toFixed(1)}%`;
+        // 강조할 칸만 빨간색: 연식은 40년 이상·30년 이상의 5년 변화, 용적률은 150% 미만·300% 이상의 2024.07 이후
+        const HL = { "연식5": { now: [0, 1] }, "용적률5": { since: [0, 4] } };
+        const cls = (key, col, k) => (HL[key][col] || []).includes(k) ? "up" : "";
+        const sec = (title, key) => `<tr><td colspan="4" style="font-weight:900;background:#faf7f2">${title}</td></tr>` +
+          SG.groups[key].map((t, k) => `<tr><td>${t.name}</td><td class="n ${cls(key, "now", k)}">${pc(t.now)}</td>` +
+            `<td class="n down">${pc(t.trough)}</td><td class="n ${cls(key, "since", k)}">+${t.since_2407}%</td></tr>`).join("");
+        document.getElementById("traitTable").innerHTML = sec("연식별 (준공 연도)", "연식5") + sec("용적률별", "용적률5");
+      }
+      const X10 = SG.cross10;
+      if (X10 && document.getElementById("cross10Note")) {
+        const cells = [];
+        X10.now.forEach((r, i) => r.forEach((v, j) => { if (v != null && X10.pairs[i][j] >= X10.min_pairs) cells.push({ v, b: X10.rows[i], f: X10.cols[j] }); }));
+        const srt = [...cells].sort((a, b) => b.v - a.v), f = v => `${v >= 100 ? "+" : ""}${(v - 100).toFixed(1)}%`;
+        const shown = X10.now.flat().filter(v => v != null).length;
+        document.getElementById("cross10Note").innerHTML = `${X10.rows.length * X10.cols.length}칸 중 값이 있는 칸 ${shown}개, 그중 거래 1,500건 이상 ${cells.length}개.<br>` +
+          `많이 오른 칸: ` + srt.slice(0, 3).map(c => `<b>${c.b} · ${c.f}</b> <b class="up">${f(c.v)}</b>`).join(", ") + `<br>` +
+          `덜 오른 칸: ` + srt.slice(-3).reverse().map(c => `<b>${c.b} · ${c.f}</b> <b class="${c.v >= 100 ? "up" : "down"}">${f(c.v)}</b>`).join(", ");
+      }
+      const S = SG.complex_scatter;
+      if (S && document.getElementById("complexTable")) {
+        const med = a => { const b = [...a].sort((x, y) => x - y); const m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+        const AGE = [["40년 이상", 0, 1986], ["30년 이상", 1987, 1996], ["20년 이상", 1997, 2006], ["10년 이상", 2007, 2016], ["10년 미만", 2017, 9999]];
+        const FAR = [[0, 150], [150, 200], [200, 250], [250, 300], [300, 1e9]];
+        document.getElementById("complexTable").innerHTML = AGE.map(([t, b0, b1]) => `<tr><td>${t}</td>` + FAR.map(([f0, f1]) => {
+          const a = S.chg.filter((v, i) => S.built[i] >= b0 && S.built[i] <= b1 && S.far[i] >= f0 && S.far[i] < f1);
+          if (a.length < 3) return `<td class="n" style="color:#aaa">–${a.length ? ` (${a.length})` : ""}</td>`;
+          const m = med(a);
+          return `<td class="n ${m >= 0 ? "up" : "down"}">${m >= 0 ? "+" : ""}${m.toFixed(1)}%<br><span style="color:#888;font-weight:400">(${a.length})</span></td>`;
+        }).join("") + "</tr>").join("");
+      }
+      const R = D.response;
+      (document.getElementById("cutN") || {}).textContent = R.cut_n;
+      (document.getElementById("cutUp") || {}).textContent = `${R.cut_up}개월(${Math.round(R.cut_up / R.cut_n * 100)}%)`;
+      (document.getElementById("hikeN") || {}).textContent = R.hike_n;
+      (document.getElementById("hikeDown") || {}).textContent = `${R.hike_down}개월(${Math.round(R.hike_down / R.hike_n * 100)}%)`;
+    }
+    const n = parseInt(location.hash.slice(1), 10);
+    show(Number.isFinite(n) ? n - 1 : 0);
+  });
+  // 창 크기가 바뀌면 글씨 크기가 바뀌므로 차트를 새로 그림
+  let rt = null;
+  window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => {
+    drawn.forEach(id => Plotly.purge(id)); drawn.clear(); renderCharts(slides[cur]);
+  }, 200); });
+</script>
+</body>
+</html>

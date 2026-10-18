@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="ko">
+<script>if (window.top !== window) document.documentElement.classList.add("embed");</script>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>구별 월간 거래가격</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js" defer></script>
+<script src="web/monthly.js" defer></script>
+<style>
+  :root {
+    --bg: #fafaf7; --surface: #ffffff; --ink: #1d1d1f; --muted: #6b6b70;
+    --line: #e6e4de; --accent: #f26b1d; --accent-soft: #fff1e7;
+    --green: #03c75a;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }   /* display:flex 등이 hidden 속성을 덮어쓰지 않도록 */
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Noto Sans KR", system-ui, sans-serif; }
+  main { padding: 28px clamp(16px, 2.5vw, 40px) 36px; }
+  h1 { font-size: clamp(22px, 2.6vw, 32px); font-weight: 900; margin: 0 0 6px; letter-spacing: -.01em; }
+  .lead { color: var(--muted); margin: 0 0 20px; line-height: 1.6; font-size: 15px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .chip {
+    font: inherit; font-size: 14px; padding: 7px 13px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  }
+  .chip:hover { border-color: var(--accent); }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  .chip .r { font-size: 12px; margin-left: 5px; font-variant-numeric: tabular-nums; }
+  .chip .r.up { color: #c0392b; }
+  .chip .r.down { color: #2b5c8a; }
+  .chip.on .r { color: #fff; }
+  .sort-note { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+  #chart { height: calc(100vh - 330px); min-height: 420px; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .stat .k { font-size: 13px; color: var(--muted); }
+  .stat .v { font-size: 22px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat .v small { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 4px; }
+
+  .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .search { position: relative; flex: 1; min-width: 260px; max-width: 520px; }
+  .search input {
+    width: 100%; font: inherit; font-size: 15px; padding: 10px 14px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  }
+  .search input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .results {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 5; max-height: 360px; overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.08);
+  }
+  .results button {
+    display: flex; justify-content: space-between; gap: 12px; width: 100%; text-align: left; font: inherit; font-size: 14px;
+    padding: 9px 14px; border: 0; background: none; cursor: pointer; color: var(--ink);
+  }
+  .results button:hover, .results button.act { background: var(--accent-soft); }
+  .results .meta { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+  .view { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .vbtn { font: inherit; font-size: 14px; padding: 9px 14px; border: 0; background: var(--surface); cursor: pointer; color: var(--ink); }
+  .vbtn.on { background: var(--ink); color: #fff; font-weight: 700; }
+  .hl-info {
+    display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; font-size: 14px;
+    background: #fff4ea; border: 1px solid #ffd2ad; border-radius: 10px; padding: 10px 14px; margin-bottom: 12px;
+  }
+  .hl-info b { color: #e86a00; }
+  .hl-info .x { margin-left: auto; font: inherit; font-size: 13px; border: 1px solid #ffd2ad; background: #fff; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+  .hl-info .x + .x { margin-left: 0; }
+  .loading {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 2;
+    background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 700;
+    padding: 6px 14px; border-radius: 999px;
+  }
+  .legend { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 12px; }
+  .legend svg { flex: none; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 10px; line-height: 1.6; }
+
+  @media (max-width: 760px) {
+    main { padding: 20px 16px 32px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ---------- PPT 기본 비율(16:9) 화면 틀 ----------
+     창 크기에 맞춰 16:9 틀을 최대한 크게 놓고(남는 곳은 여백), 글씨는 틀 너비에 비례(--u = 틀 너비의 1%) */
+  html, body { height: 100%; }
+  body { overflow: hidden; display: grid; place-items: center; background: #e7e5df; }
+  /* 발표 자료(deck.html) 안에 끼워 넣을 때: 틀을 iframe 크기에 꽉 채우고 바깥 여백·배경 없음 */
+  html.embed body { display: block; background: transparent; }
+  html.embed main.app { width: 100vw; height: 100vh; padding: 0; background: transparent; box-shadow: none; }
+  main.app {
+    --w: min(100vw, calc(100vh * 16 / 9));
+    --u: calc(var(--w) / 100);
+    width: var(--w); height: calc(var(--w) * 9 / 16);
+    background: var(--bg); box-shadow: 0 0 0 1px var(--line);
+    display: flex; flex-direction: column; gap: calc(var(--u) * .55);
+    padding: calc(var(--u) * 1.2) calc(var(--u) * 1.6);
+  }
+  .top { display: flex; align-items: center; gap: calc(var(--u) * .6) calc(var(--u) * 1.2); flex-wrap: wrap; }
+  .top h1 { font-size: calc(var(--u) * 2.4); margin: 0; white-space: nowrap; }
+  .top h1 small { display: block; font-size: calc(var(--u) * .78); font-weight: 500; color: var(--muted); margin: 2px 0 0; }
+  .top .toolbar { margin: 0 0 0 calc(var(--u) * 3); flex: 1; min-width: 0; }
+  .search { max-width: calc(var(--u) * 40); min-width: calc(var(--u) * 24); flex: 1; }
+  .search .box {
+    display: flex; align-items: stretch; height: calc(var(--u) * 3.1);
+    border: 2px solid var(--green); border-radius: calc(var(--u) * .5); background: #fff; overflow: hidden;
+  }
+  .search .box:focus-within { box-shadow: 0 0 0 3px rgba(3,199,90,.18); }
+  .search input {
+    flex: 1; min-width: 0; border: 0; border-radius: 0; outline: none; background: transparent;
+    padding: 0 calc(var(--u) * 1.1); font-size: calc(var(--u) * 1.15); font-weight: 500;
+  }
+  .search input:focus { outline: none; }
+  .search input::placeholder { color: #9a9a9a; font-weight: 400; }
+  .search .go-btn {
+    flex: none; width: calc(var(--u) * 3.4); border: 0; background: var(--green); cursor: pointer;
+    display: grid; place-items: center;
+  }
+  .search .go-btn:hover { filter: brightness(.95); }
+  .search .go-btn svg { width: calc(var(--u) * 1.45); height: calc(var(--u) * 1.45); }
+  .results { border-color: var(--green); }
+  .results button:hover, .results button.act { background: #eafaf1; }
+  .results button { font-size: calc(var(--u) * .9); }
+  .vbtn { padding: calc(var(--u) * .45) calc(var(--u) * .8); font-size: calc(var(--u) * .85); }
+  .kpis {
+    position: absolute; z-index: 3; display: flex; gap: calc(var(--u) * 1.1); white-space: nowrap; pointer-events: none;
+    font-size: calc(var(--u) * .8); color: var(--muted);
+    background: rgba(255,255,255,.88); border: 1px solid var(--line); border-radius: 8px; padding: calc(var(--u) * .3) calc(var(--u) * .7);
+  }
+  .kpis b { color: var(--ink); font-size: calc(var(--u) * 1.05); font-variant-numeric: tabular-nums; margin-left: 4px; }
+  .kpis small { margin-left: 3px; font-size: calc(var(--u) * .75); }
+  .hl-info { margin: 0; padding: calc(var(--u) * .4) calc(var(--u) * .8); font-size: calc(var(--u) * .85); }
+  .hl-info .x { font-size: calc(var(--u) * .8); }
+  .chips { margin: 0; gap: calc(var(--u) * .3); align-items: center; }
+  .chip { font-size: calc(var(--u) * .85); padding: calc(var(--u) * .2) calc(var(--u) * .6); }
+  .chip .r { font-size: calc(var(--u) * .72); margin-left: 3px; }
+  .sort-note { margin: 0 4px 0 0; font-size: calc(var(--u) * .75); white-space: nowrap; }
+  .card { flex: 1; min-height: 0; position: relative; padding: 6px; }
+  #chart { position: absolute; inset: 6px; height: auto; min-height: 0; }
+  .legend { margin: 0; gap: 2px calc(var(--u) * 1.1); font-size: calc(var(--u) * .75); }
+  .loading { font-size: calc(var(--u) * .85); }
+</style>
+</head>
+<body>
+<main class="app">
+  <div class="top">
+    <h1>서울 아파트 ㎡당 거래가격<small>2021.09 – 2026.08 · 국토교통부 실거래가 (해제 거래 제외)</small></h1>
+    <div class="toolbar">
+      <div class="search">
+        <div class="box">
+          <input id="q" type="search" placeholder="아파트 이름을 입력하세요 (예: 은마, 헬리오시티)" autocomplete="off" aria-label="아파트 이름 검색">
+          <button class="go-btn" id="goBtn" aria-label="검색">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
+          </button>
+        </div>
+        <div id="results" class="results" hidden></div>
+      </div>
+      <div class="view" role="group" aria-label="보기 방식">
+        <button class="vbtn on" data-view="box">상자 보기</button>
+        <button class="vbtn" data-view="line">추이선만</button>
+      </div>
+    </div>
+
+  </div>
+  <div id="hlInfo" class="hl-info" hidden></div>
+  <div class="chips" id="chips"><span class="sort-note" title="같은 단지·같은 평형의 재거래 가격 비교(반복매매지수) 기준, 2021.09 → 2026.08">5년 상승률 순 ▸</span></div>
+
+  <div class="card">
+    <div id="loadingNote" class="loading" hidden>거래 자료 불러오는 중…</div>
+    <div id="chart"></div>
+    <div class="kpis" id="kpis">
+      <span>2021.09 중위<b id="sFirst">–</b></span>
+      <span>2026.08 중위<b id="sLast">–</b></span>
+      <span>최저 중위<b id="sMin">–</b></span>
+      <span>거래<b id="sN">–</b></span>
+    </div>
+  </div>
+
+  <div class="legend" title="월별 분포는 그달 실제로 거래된 아파트의 구성에 따라 달라진다. 거래 건수가 적은 달은 해석에 유의.">
+    <span>상자 = 가운데 50% · 선 = 중위 · 수염 = 10~90%</span>
+    <span><span style="display:inline-block;width:44px;height:8px;border-radius:3px;vertical-align:0;background:linear-gradient(90deg,#fde2e7,#a50015)"></span> 상자 색 = 월 거래 건수</span>
+    <span><svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill="#0052ff"/></svg> 500세대 이상 (조금 큰 점 = 비슷한 가격 5건 묶음)</span>
+    <span><svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4" fill="#464650" opacity=".5"/></svg> 500세대 미만·미확인 (점 1개 = 1건)</span>
+    <span><svg width="10" height="10" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="#ff7a00"/></svg> 검색한 단지</span>
+    <span><span style="display:inline-block;width:18px;height:3px;background:#03c75a;vertical-align:2px"></span> 주담대 금리 (오른쪽 축)</span>
+    <span><span style="display:inline-block;width:18px;height:3px;background:#ff5a00;vertical-align:2px"></span> 월별 중위가격 (아래 회색 음영)</span>
+  </div>
+</main>
+
+<script>
+  window.addEventListener("load", () => {
+    const D = window.MONTHLY;
+    if (!D || !window.Plotly) return;
+    const chips = document.getElementById("chips");
+    const el = document.getElementById("chart");
+    const won = v => v == null ? "–" : v.toLocaleString();
+
+    // 같은 거래는 항상 같은 위치에 오도록 고정된 의사난수로 좌우 흩뿌림
+    const jitter = k => { const s = Math.sin(k * 12.9898) * 43758.5453; return (s - Math.floor(s)) - .5; };
+    const xs = D.months.map((m, i) => i);
+
+    // 구별 개별 거래 파일(web/trades/<구코드>.js)은 처음 선택할 때 한 번만 불러옴
+    window.TRADES = window.TRADES || {};
+    const loading = {};
+    function loadGu(gu) {
+      if (window.TRADES[gu]) return Promise.resolve();
+      return loading[gu] ||= new Promise((ok, fail) => {
+        const s = document.createElement("script");
+        s.src = `web/trades/${D.codes[gu]}.js`;
+        s.onload = ok; s.onerror = fail;
+        document.head.appendChild(s);
+      });
+    }
+    const guList = D.order.slice(1);
+    const loadFor = name => Promise.all(name === "서울 전체" ? guList.map(loadGu) : [loadGu(name)]);
+
+    const eok = v => {  // 만원 → "28억 4,000만"
+      const e = Math.floor(v / 10000), r = v % 10000;
+      return (e ? `${e}억` : "") + (r ? `${e ? " " : ""}${r.toLocaleString()}만` : "") + "원";
+    };
+
+    const BIG = 500;   // 이 세대수 이상 단지는 진한 파랑으로 구분
+
+    // 검색으로 고른 단지 (null이면 강조 없음): { name, dong, gu }
+    let hl = null;
+    let view = "box";
+    let blink = null;
+
+    function points(name) {
+      const gus = name === "서울 전체" ? guList : [name];
+      const big = { x: [], y: [], text: [] }, small = { x: [], y: [], cd: [] };
+      const bigOne = { x: [], y: [], cd: [] };   // 5건 묶음에 들지 못한 500세대 이상 거래 (개별 점)
+      const H = { x: [], y: [], cd: [], rows: [] };   // 강조 단지 거래
+      let k = 0, g5 = 0;
+      for (let i = 0; i < D.months.length; i++) {
+        const [yy, mm] = D.months[i].split("-");
+        const bigMonth = [];
+        for (const gu of gus) {
+          const T = window.TRADES[gu];
+          for (const [ppm, a, area, floor, price, day] of T.m[i]) {
+            const [apt, dong, hh] = T.apt[a];
+            const x = i + jitter(k++) * .7;
+            const date = `${yy}.${mm}.${String(day).padStart(2, "0")}`;
+            const cd = [apt, `${gu} ${dong}`, area, floor, eok(price), date,
+                        hh == null ? "세대수 미확인" : `${hh.toLocaleString()}세대`];
+            if (hh >= BIG) bigMonth.push({ ppm, apt, price, area, date, x, cd });
+            else { small.x.push(x); small.y.push(ppm); small.cd.push(cd); }
+            if (hl && hl.gu === gu && hl.name === apt && hl.dong === dong) {
+              H.x.push(x); H.y.push(ppm); H.cd.push(cd);
+              H.rows.push({ date, price, area, floor });
+            }
+          }
+        }
+        // 500세대 이상 거래는 그달 안에서 ㎡당 가격순으로 5건씩 묶어 조금 큰 점 하나로 (점 위치 = 5건 평균)
+        // 5건이 다 차지 않는 나머지는 다른 점과 같은 크기의 개별 점
+        bigMonth.sort((a, b) => a.ppm - b.ppm);
+        const full = bigMonth.length - bigMonth.length % 5;
+        for (const t of bigMonth.slice(full)) { bigOne.x.push(t.x); bigOne.y.push(t.ppm); bigOne.cd.push(t.cd); }
+        for (let j = 0; j < full; j += 5) {
+          const grp = bigMonth.slice(j, j + 5);
+          big.x.push(i + jitter(900000 + g5++) * .7);
+          big.y.push(Math.round(grp.reduce((s, t) => s + t.ppm, 0) / grp.length));
+          big.text.push(`<b>500세대 이상 거래 ${grp.length}건 묶음</b> · ${D.months[i].replace("-", ".")}<br>` +
+            grp.map(t => `${t.apt} · ${t.area.toFixed(0)}㎡ · ${eok(t.price)} (㎡당 ${t.ppm.toLocaleString()}만) · ${t.date.slice(5)}`).join("<br>"));
+        }
+      }
+      return { big, bigOne, small, H };
+    }
+
+    const HOVER = "<b>%{customdata[0]}</b> · %{customdata[6]}<br>%{customdata[1]}<br>" +
+                  "전용 %{customdata[2]:.1f}㎡ · %{customdata[3]}층<br>" +
+                  "<b>%{customdata[4]}</b> (㎡당 %{y:,}만원)<br>계약일 %{customdata[5]}<extra></extra>";
+
+    function showHlInfo(H) {
+      const box = document.getElementById("hlInfo");
+      if (!hl) { box.hidden = true; return; }
+      const r = [...H.rows].sort((a, b) => a.date.localeCompare(b.date));   // 같은 달 안은 가격순이라 날짜순으로 다시 정렬
+      box.hidden = false;
+      if (current !== "서울 전체" && current !== hl.gu) {   // 검색한 단지와 다른 구를 보고 있을 때
+        box.innerHTML = `<span><b>${hl.name}</b>은(는) ${hl.gu} ${hl.dong} 단지입니다 · 지금은 ${current}를 보는 중</span>` +
+          `<button class="x go">${hl.gu}로 이동</button><button class="x">강조 해제</button>`;
+        box.querySelector(".go").onclick = () => draw(hl.gu);
+        box.querySelector(".x:not(.go)").onclick = () => { hl = null; document.getElementById("q").value = ""; draw(current); };
+        return;
+      }
+      if (!r.length) { box.innerHTML = `<span><b>${hl.name}</b> (${hl.gu} ${hl.dong}) · 기간 내 거래 없음</span><button class="x">강조 해제</button>`; }
+      else {
+        const hi = r.reduce((a, b) => b.price > a.price ? b : a), lo = r.reduce((a, b) => b.price < a.price ? b : a);
+        const f = x => `${eok(x.price)} <small>(${x.date} · ${x.area.toFixed(0)}㎡ · ${x.floor}층)</small>`;
+        box.innerHTML = `<span><b>${hl.name}</b> · ${hl.gu} ${hl.dong} · 5년간 <b>${r.length}건</b></span>` +
+          `<span>첫 거래 ${f(r[0])}</span><span>최근 ${f(r[r.length - 1])}</span>` +
+          `<span>최고 ${f(hi)}</span><span>최저 ${f(lo)}</span><button class="x">강조 해제</button>`;
+      }
+      box.querySelector(".x").onclick = () => { hl = null; document.getElementById("q").value = ""; draw(current); };
+    }
+
+    let current = "서울 전체";
+    let drawSeq = 0;
+    async function draw(name) {
+      current = name;
+      if (blink) { clearInterval(blink); blink = null; }
+      [...chips.children].forEach(c => c.classList.toggle("on", c.dataset.gu === name));
+      const seq = ++drawSeq;
+      document.getElementById("loadingNote").hidden = false;
+      try { await loadFor(name); } finally { if (seq === drawSeq) document.getElementById("loadingNote").hidden = true; }
+      if (seq !== drawSeq) return;   // 불러오는 사이 다른 구를 눌렀으면 이전 요청은 버림
+      [...chips.children].forEach(c => c.classList.toggle("on", c.dataset.gu === name));
+      const g = D.gu[name];
+      const hover = D.months.map((m, i) =>
+        `<b>${m.replace("-", ".")}</b> · ${g.n[i].toLocaleString()}건 · 주담대 금리 ${D.rate[i].toFixed(2)}%<br>` +
+        `상위 10%: ${won(g.p90[i])}<br>75%: ${won(g.p75[i])}<br><b>중위: ${won(g.p50[i])}</b><br>` +
+        `25%: ${won(g.p25[i])}<br>하위 10%: ${won(g.p10[i])}<br><span style="color:#888">만원/㎡</span>`);
+
+      const { big, bigOne, small, H } = points(name);
+      const py = big.y.concat(bigOne.y, small.y, H.y);
+      // 점 크기·진하기는 모든 구에서 동일 (구끼리 비교할 때 거래 밀도가 그대로 보이도록)
+      const size = 3.5, alpha = .6;
+
+      // 상위 10% 초과 극단값까지 다 보이면 상자가 납작해지므로 y축은 99% 지점까지만
+      const sorted = [...py].sort((a, b) => a - b);
+      const ymax = sorted[Math.floor(sorted.length * .995)] * 1.05;
+
+      // 거래량 그라데이션: 그 구에서 거래가 가장 적은 달 = 연분홍, 가장 많은 달 = 진한 빨강
+      const nMin = Math.min(...g.n), nMax = Math.max(...g.n);
+      const LO = [253, 226, 231], HI = [165, 0, 21];   // #fde2e7 → #a50015
+      const mix = t => LO.map((c, k) => Math.round(c + (HI[k] - c) * t));
+      const tOf = n => nMax === nMin ? 1 : (n - nMin) / (nMax - nMin);
+      const boxes = D.months.map((m, i) => {
+        const [r, gg, b] = mix(tOf(g.n[i]));
+        const [lr, lg, lb] = mix(Math.min(1, tOf(g.n[i]) + .35));   // 테두리는 조금 더 진하게
+        return {
+          type: "box", x: [i], width: .72,
+          q1: [g.p25[i]], median: [g.p50[i]], q3: [g.p75[i]], lowerfence: [g.p10[i]], upperfence: [g.p90[i]],
+          fillcolor: `rgba(${r},${gg},${b},.85)`, line: { color: `rgb(${lr},${lg},${lb})`, width: 1.2 },
+          whiskerwidth: .3, hoverinfo: "skip",
+        };
+      });
+
+      // 중위가격 꺾은선 + 그 아래 투명한 회색 음영 (두 보기 공통)
+      // 음영은 일반 그래프(SVG)라 점보다 아래에 깔리고, 선은 WebGL로 그려 점 위에 보이게 한다
+      const areaUnder = {
+        type: "scatter", mode: "lines", x: xs, y: g.p50, fill: "tozeroy",
+        fillcolor: "rgba(110,110,110,.22)", line: { width: 0, shape: "spline", smoothing: .4 }, hoverinfo: "skip",
+      };
+      const medianLine = {
+        type: "scattergl", mode: "lines+markers", x: xs, y: g.p50,
+        line: { color: "#ff5a00", width: 1.8 }, marker: { size: 3.5, color: "#ff5a00" }, hoverinfo: "skip",
+      };
+      // 글씨 크기: 16:9 화면 틀 너비에 비례
+      const U = Math.min(innerWidth, innerHeight * 16 / 9) / 100;   // CSS --u 와 같은 값
+      const fs = k => Math.max(10, Math.round(U * k));
+
+      const traces = [
+        areaUnder,
+        ...(view === "box" ? boxes : []),
+        // 개별 거래 점 (마우스를 올리면 거래 정보) — 500세대 미만·미확인 / 500세대 이상
+        {
+          type: "scattergl", mode: "markers", x: small.x, y: small.y, customdata: small.cd,
+          marker: { size, color: `rgba(70,70,80,${alpha * .75})`, line: { width: 0 } }, hovertemplate: HOVER,
+        },
+        {
+          type: "scattergl", mode: "markers", x: bigOne.x, y: bigOne.y, customdata: bigOne.cd,
+          marker: { size, color: "rgba(0,82,255,.8)", line: { width: 0 } }, hovertemplate: HOVER,
+        },
+        {
+          type: "scattergl", mode: "markers", x: big.x, y: big.y, text: big.text,
+          marker: { size: size + 2.5, color: "rgba(0,82,255,.8)", line: { width: .5, color: "#fff" } },
+          hovertemplate: "%{text}<extra></extra>",
+        },
+        medianLine,
+        {
+          // 마우스오버용 투명 점 (box 기본 툴팁은 영어라 직접 구성) + 거래량 색상 범례
+          type: "scatter", mode: "markers", x: xs, y: g.p50, text: hover,
+          hovertemplate: "%{text}<extra></extra>",
+          marker: {
+            size: 22, opacity: 0, color: g.n, cmin: nMin, cmax: nMax,
+            colorscale: [[0, `rgb(${LO})`], [1, `rgb(${HI})`]],
+            showscale: true,
+            colorbar: { title: { text: "월 거래 건수", side: "top", font: { size: fs(.8) } }, orientation: "h",
+                        x: 1, xanchor: "right", y: 1.01, yanchor: "bottom", len: .22, thickness: Math.round(U * .6),
+                        tickformat: ",", outlinewidth: 0, tickfont: { size: fs(.72) } },
+          },
+        },
+        {
+          // 시장금리: 예금은행 주택담보대출 금리 (오른쪽 축)
+          type: "scatter", mode: "lines+markers", x: xs, y: D.rate, yaxis: "y2", name: "주담대 금리",
+          line: { color: "#03c75a", width: 2.5, shape: "spline", smoothing: .3 },
+          marker: { size: 4, color: "#03c75a" }, hoverinfo: "skip",
+        },
+      ];
+      // 마우스오버 설명 상자: 글자색을 직접 지정하지 않으면 점 색에 맞춰 옅은 회색으로 나와 잘 안 보임
+      const HL = { bgcolor: "rgba(255,255,255,.97)", bordercolor: "#555", align: "left",
+                   font: { color: "#111", size: fs(.95), family: "Noto Sans KR, system-ui, sans-serif" } };
+      // 검색한 단지 거래: 주황색, 맨 위에 그리고 깜빡임
+      const hlIndex = traces.length;
+      if (H.x.length) traces.push({
+        type: "scattergl", mode: "markers", x: H.x, y: H.y, customdata: H.cd, hovertemplate: HOVER,
+        marker: { size: 11, color: "#ff7a00", opacity: 1, line: { width: 1.5, color: "#fff" } },
+      });
+
+      traces.forEach(t => { t.hoverlabel = HL; });   // 점 종류별 설정이 덮어쓰지 않도록 모든 그래프에 같은 스타일
+      Plotly.react(el, traces, {
+        width: el.clientWidth, height: el.clientHeight,
+        font: { family: "Noto Sans KR, system-ui, sans-serif", size: fs(.9), color: "#1d1d1f" },
+        paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+        margin: { l: Math.round(U * 4.6), r: Math.round(U * 4.2), t: Math.round(U * 2.6), b: Math.round(U * 3.6) },
+        showlegend: false, hovermode: "closest",
+        yaxis2: { overlaying: "y", side: "right", range: [2.5, 5.2], ticksuffix: "%", showgrid: false, zeroline: false,
+                  title: { text: "주담대 금리 (%)", font: { color: "#03c75a" } }, tickfont: { color: "#03c75a" } },
+        xaxis: { range: [-.7, D.months.length - .3], showgrid: false, zeroline: false,
+                 // 3개월 간격 + 마지막 달(2026.08)
+                 tickvals: xs.filter(i => i % 3 === 0 || i === xs.length - 1),
+                 ticktext: D.months.filter((m, i) => i % 3 === 0 || i === D.months.length - 1).map(m => m.replace("-", ".")),
+                 tickangle: -45, tickfont: { size: fs(.75) } },
+        yaxis: { title: { text: "㎡당 거래가격 (만원)" }, gridcolor: "#f0eee8", tickformat: ",",
+                 zeroline: false, range: [0, ymax] },
+        hoverlabel: HL,
+      }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d"] });
+
+      showHlInfo(H);
+      if (H.x.length) {
+        let on = false;
+        blink = setInterval(() => {
+          on = !on;
+          Plotly.restyle(el, { "marker.size": on ? 16 : 11, "marker.opacity": on ? .55 : 1 }, [hlIndex]);
+        }, 550);
+      }
+
+      const p = g.p50, last = p.length - 1;
+      let mi = 0; p.forEach((v, i) => { if (v != null && (p[mi] == null || v < p[mi])) mi = i; });
+      const chg = p[0] && p[last] ? ((p[last] / p[0] - 1) * 100) : null;
+      document.getElementById("sFirst").innerHTML = `${won(p[0])}<small>만원/㎡</small>`;
+      document.getElementById("sLast").innerHTML = `${won(p[last])}<small>${chg == null ? "" : (chg > 0 ? "+" : "") + chg.toFixed(1) + "%"}</small>`;
+      document.getElementById("sMin").innerHTML = `${won(p[mi])}<small>${D.months[mi].replace("-", ".")}</small>`;
+      document.getElementById("sN").innerHTML = `${g.n.reduce((a, b) => a + b, 0).toLocaleString()}<small>건</small>`;
+      fit();   // 위 숫자·안내 줄이 채워지며 그래프 칸 높이가 바뀌므로 마지막에 크기 맞춤
+      // 숫자 줄은 그래프 안쪽 왼쪽 위(세로축 바로 오른쪽)에 붙임
+      const mg = el._fullLayout.margin, kp = document.getElementById("kpis");
+      kp.style.left = `${6 + mg.l + 10}px`;
+      kp.style.top = `${6 + mg.t + 6}px`;
+    }
+
+    D.order.forEach(name => {
+      const b = document.createElement("button");
+      const r = D.rise[name];
+      b.className = "chip"; b.dataset.gu = name;
+      b.innerHTML = `${name}<span class="r ${r >= 0 ? "up" : "down"}">${r > 0 ? "+" : ""}${r.toFixed(1)}%</span>`;
+      b.onclick = () => draw(name);
+      chips.appendChild(b);
+    });
+
+    // 검색 안내 줄이 생기거나 창 크기가 바뀌어 그래프 칸이 달라지면 그래프도 다시 맞춤
+    // (자동 맞춤이 절대 위치 칸에서 이전 크기를 유지하는 경우가 있어 실제 칸 크기를 직접 지정)
+    const fit = () => {
+      if (el.data && (el.clientHeight !== el._fullLayout.height || el.clientWidth !== el._fullLayout.width))
+        Plotly.relayout(el, { width: el.clientWidth, height: el.clientHeight });
+    };
+    document.fonts.ready.then(() => setTimeout(fit, 50));   // 글꼴 적용 후 버튼 줄 높이가 바뀌는 경우
+    // 창 크기가 바뀌면 16:9 틀 크기와 글씨 크기가 함께 바뀌므로 다시 그림 (연속 조절 중에는 마지막에 한 번만)
+    let resizeTimer = null;
+    window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => draw(current), 200); });
+    let lastSize = "";
+    new ResizeObserver(() => {
+      const size = `${el.clientWidth}x${el.clientHeight}`;
+      if (el.data && size !== lastSize) { lastSize = size; Plotly.relayout(el, { width: el.clientWidth, height: el.clientHeight }); }
+    }).observe(el);
+
+    // ---------- 보기 전환 ----------
+    document.querySelectorAll(".vbtn").forEach(b => b.onclick = () => {
+      view = b.dataset.view;
+      document.querySelectorAll(".vbtn").forEach(x => x.classList.toggle("on", x === b));
+      draw(current);
+    });
+
+    // ---------- 아파트 검색 ----------
+    const q = document.getElementById("q"), results = document.getElementById("results");
+    const squash = s => s.replace(/\s|\(|\)|아파트/g, "").toLowerCase();
+    // 찾는 이름: 실거래 단지명, K-apt 공식 단지명(별칭), 동네+단지명 (예: "잠원" + "동아" = 잠원동아)
+    const stem = dong => dong.replace(/동$|\d*가$|\d+동$/, "");
+    const index = D.search.map(([name, dong, gu, n, alias]) => ({
+      name, dong, gu, n, alias,
+      keys: [squash(name), squash(alias || ""), squash(stem(dong) + name)],   // [단지명, 별칭, 동네+단지명]
+    }));
+    let matches = [], act = 0;
+
+    function pick(m) {
+      hl = { name: m.name, dong: m.dong, gu: m.gu };
+      q.value = m.name;
+      results.hidden = true;
+      draw(m.gu);
+    }
+    function renderResults() {
+      const s = squash(q.value);
+      // 이름이 검색어로 시작하는 단지 먼저, 그다음 이름 중간에 포함된 단지 (각각 거래 많은 순)
+      const starts = m => m.keys.some(k => k && k.startsWith(s));
+      // 단지명·별칭은 중간 포함도 허용, 동네+단지명 조합은 앞부분 일치만 (엉뚱한 단지가 섞이지 않게)
+      const has = m => m.keys[0].includes(s) || (m.keys[1] && m.keys[1].includes(s));
+      matches = s ? [...index.filter(starts), ...index.filter(m => !starts(m) && has(m))].slice(0, 15) : [];
+      act = 0;
+      results.hidden = !matches.length;
+      results.innerHTML = matches.map((m, i) =>
+        `<button data-i="${i}" class="${i === 0 ? "act" : ""}"><span>${m.name}${m.alias ? ` <span class="meta">(${m.alias})</span>` : ""}</span>` +
+        `<span class="meta">${m.gu} ${m.dong} · ${m.n.toLocaleString()}건</span></button>`).join("");
+      results.querySelectorAll("button").forEach(b => b.onclick = () => pick(matches[+b.dataset.i]));
+    }
+    q.addEventListener("input", renderResults);
+    document.getElementById("goBtn").onclick = () => {
+      if (!matches.length) renderResults();
+      if (matches[act]) pick(matches[act]);
+    };
+    q.addEventListener("keydown", e => {
+      if (results.hidden) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        act = (act + (e.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length;
+        results.querySelectorAll("button").forEach((b, i) => b.classList.toggle("act", i === act));
+      } else if (e.key === "Enter" && matches[act]) { e.preventDefault(); pick(matches[act]); }
+      else if (e.key === "Escape") results.hidden = true;
+    });
+    document.addEventListener("click", e => { if (!e.target.closest(".search")) results.hidden = true; });
+
+    // 처음 보여줄 구: 주소의 ?gu=구이름 (없거나 잘못되면 5년 상승률 1위인 용산구)
+    const startGu = new URLSearchParams(location.search).get("gu");
+    draw(D.gu[startGu] ? startGu : "용산구");
+  });
+</script>
+</body>
+</html>
